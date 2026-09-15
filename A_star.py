@@ -1,10 +1,7 @@
-
-
-
-#flint session: https://app.flintk12.com/classes/us-7415-g-adv-m-ef82a8/chats/ae8eb649-5a09-490e-aa56-b0a04cd763be
-#i used flint to walk me through how a* searching algo works and to get me started on the basics of pygame cuz i never took into to game design unfortunately
-#also used this video to help me with the python implementation of the A*. It gave me the idea of using priority queue so it will auto keep track of which node it should check next. the priority queue sorts all the nodes so the node with total lowest distance is always at front.
-#https://www.youtube.com/watch?v=JtiK0DOeI4A
+# flint session: https://app.flintk12.com/classes/us-7415-g-adv-m-ef82a8/chats/ae8eb649-5a09-490e-aa56-b0a04cd763be
+# i used flint to walk me through how a* searching algo works and to get me started on the basics of pygame cuz i never took into to game design unfortunately
+# also used this video to help me with the python implementation of the A*. It gave me the idea of using priority queue so it will auto keep track of which node it should check next. the priority queue sorts all the nodes so the node with total lowest distance is always at front.
+# https://www.youtube.com/watch?v=JtiK0DOeI4A
 import pygame
 from queue import PriorityQueue
 
@@ -17,17 +14,22 @@ WHITE = (255, 255, 255)
 ORANGE = (255, 165, 0)
 TURQUOISE = (64, 224, 208)
 GREY = (128, 128, 128)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLACK = (0, 0, 0)
 
 
 class Node:
-    def __init__(self, row, col, width):
+
+    def __init__(self, row, col, width, total_rows):
         self.row = row
         self.col = col
         self.x = row * width
         self.y = col * width
         self.color = WHITE
         self.width = width
-        self.neighbors = []  # Added an empty list for neighbors (needed later)
+        self.total_rows = total_rows
+        self.neighbors = []
 
     def reset(self):
         self.color = WHITE
@@ -37,6 +39,35 @@ class Node:
 
     def make_end(self):
         self.color = TURQUOISE
+
+
+    def is_barrier(self):
+        return self.color == BLACK
+
+    def make_barrier(self):
+        self.color = BLACK
+
+    def make_closed(self):
+        self.color = RED
+
+    def make_open(self):
+        self.color = GREEN
+
+
+    def update_neighbors(self, grid):
+        self.neighbors = []
+
+        if self.row < self.total_rows - 1 and not grid[self.row + 1][self.col].is_barrier():
+            self.neighbors.append(grid[self.row + 1][self.col])
+
+        if self.row > 0 and not grid[self.row - 1][self.col].is_barrier():
+            self.neighbors.append(grid[self.row - 1][self.col])
+
+        if self.col < self.total_rows - 1 and not grid[self.row][self.col + 1].is_barrier():
+            self.neighbors.append(grid[self.row][self.col + 1])
+
+        if self.col > 0 and not grid[self.row][self.col - 1].is_barrier():
+            self.neighbors.append(grid[self.row][self.col - 1])
 
     def draw(self, win):
         pygame.draw.rect(win, self.color, (self.x, self.y, self.width, self.width))
@@ -48,7 +79,7 @@ def make_grid(rows, width):
     for i in range(rows):
         grid.append([])
         for j in range(rows):
-            node = Node(i, j, gap)
+            node = Node(i, j, gap, rows)
             grid[i].append(node)
     return grid
 
@@ -78,8 +109,6 @@ def get_clicked_pos(pos, rows, width):
     return row, col
 
 
-#new a* added w/o implementation uet. USED MANHATTAN DISTAnCE!!!
-
 def heuristic(p1, p2):
     x1, y1 = p1
     x2, y2 = p2
@@ -89,14 +118,9 @@ def heuristic(p1, p2):
 def a_star_algorithm(draw, grid, start, end):
     count = 0
     open_set = PriorityQueue()
-    #
     open_set.put((0, count, start))
-
-    # "storage" kinda as it keeps track of where it came from
     came_from = {}
 
-
-    #g_score is shortest curr dist.
     g_score = {node: float("inf") for row in grid for node in row}
     g_score[start] = 0
 
@@ -106,17 +130,18 @@ def a_star_algorithm(draw, grid, start, end):
     open_set_hash = {start}
 
     while not open_set.empty():
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
 
         current = open_set.get()[2]
         open_set_hash.remove(current)
 
-
         if current == end:
+            end.make_end()
             return True
 
-
         for neighbor in current.neighbors:
-
             temp_g_score = g_score[current] + 1
 
             if temp_g_score < g_score[neighbor]:
@@ -124,16 +149,21 @@ def a_star_algorithm(draw, grid, start, end):
                 g_score[neighbor] = temp_g_score
                 f_score[neighbor] = temp_g_score + heuristic((neighbor.row, neighbor.col), (end.row, end.col))
 
-
                 if neighbor not in open_set_hash:
                     count += 1
                     open_set.put((f_score[neighbor], count, neighbor))
                     open_set_hash.add(neighbor)
 
+                    neighbor.make_open()
+
+
+        draw()
+
+
+        if current != start:
+            current.make_closed()
+
     return False
-
-
-
 
 
 def main(win, width):
@@ -161,7 +191,9 @@ def main(win, width):
                 elif not end and node != start:
                     end = node
                     end.make_end()
-
+                #left click draws barriers
+                elif node != end and node != start:
+                    node.make_barrier()
 
             elif pygame.mouse.get_pressed()[2]:
                 pos = pygame.mouse.get_pos()
@@ -180,9 +212,15 @@ def main(win, width):
                     end = None
                     grid = make_grid(ROWS, width)
 
-               #when user presses spacebar on keyboard itll start the run for a*.
+                #spacebar starts a*
                 if event.key == pygame.K_SPACE and start and end:
-                    pass
+
+                    for row in grid:
+                        for node in row:
+                            node.update_neighbors(grid)
+
+
+                    a_star_algorithm(lambda: draw(win, grid, ROWS, width), grid, start, end)
 
     pygame.quit()
 
